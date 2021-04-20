@@ -4,3 +4,7 @@ If you are interested in this project read about the use case [here](./docs/usec
 
 ## Overview
 Just simple to do that added with simple gamification
+
+## Contributing
+For now there is other than the use case, there is only this [Technical Requirement](./docs/technicalrequirement.md).
+TODO: add more contributing guidelines
