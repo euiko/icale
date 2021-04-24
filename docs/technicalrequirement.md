@@ -30,7 +30,7 @@ The development process are start with domain definition, so we can agree about 
 
 Last for the technology we choose, is look like this but we are more flexible around this.
 - Server : Rust
-- Frontend : Javascript(svelte)
+- Frontend : Typescript/Javascript (svelte/react)
 - Persistent Store : sled, postgresql
 - Cache : In-memory cache, keydb/redis
 - Event System: In-memoty event, NATS Streaming
