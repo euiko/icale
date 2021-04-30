@@ -41,6 +41,9 @@ For this purpose maybe good to have this project opensource :D.
 - Can later add/specify specify the price to the items of shopping list even after it is completed
 - You can get a report about your shopping expense later, and use it to manage your financial 
 
+## Tasks dashboard
+- Unify all of your tasks in one place
+
 ## To Do List
 - Need basic mechanism to maintain all the tasks in form of to do list.
 - Created to do could be associated with specific time or date, or when the case can be not attached into any time

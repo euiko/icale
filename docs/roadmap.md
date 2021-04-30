@@ -9,10 +9,10 @@ Ideation :
 - [x] Define some component and use cases
 - [x] Define overview around what stack/technology to be used
 - [x] Make a roadmap
-- [ ] Detail and design the first feature set to be delivered
+- [x] Detail and design the first feature set to be delivered
 
-Feature Set #1 :
-- [ ] User/Account Management
+Feature Set #1 (POC) :
+- [ ] User Profile
 - [ ] To Do List
 - [ ] Tag Management
 
@@ -28,4 +28,5 @@ Feature Set #3 :
 - [ ] Milestones
 
 Feature Set #4 :
-- To Be Added
+- [ ] User/Account Management (Server)
+- [ ] Server Implementation
