@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "icale-core",
+    "client/wasm-rs",
+]
