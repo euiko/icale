@@ -6,17 +6,13 @@ mod tests {
     }
 }
 
-extern crate js_sys;
+pub mod service;
+
 extern crate chrono;
 
-use js_sys::Date;
-use chrono::offset::Local;
+use chrono::Utc;
 
-pub fn now_utc() -> f64 {
-    if cfg!(target_arch="wasm32") {
-        Date::now()
-    } else {
-        Local::now().timestamp_millis() as f64
-    }
+pub fn now_utc() -> chrono::DateTime<Utc> {
+    Utc::now()
 } 
 

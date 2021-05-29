@@ -17,6 +17,6 @@ extern {
 #[wasm_bindgen]
 pub fn greet() {
     let now = icale_core::now_utc();
-    let str : std::string::String = format!("Hello, wasm-rs! Now is {}", now);
+    let str : std::string::String = format!("Hello, wasm-rs! Now is {}", now.timestamp());
     alert(&str);
 }
