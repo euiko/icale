@@ -1,7 +1,7 @@
 
 use async_trait::async_trait;
 use crate::service::character::domain::*;
-use chrono::DateTime;
+use std::fmt::Display;
 use std::result::Result;
 use std::option::Option;
 use config::*;
@@ -10,9 +10,22 @@ pub mod glue;
 
 pub enum ErrorKind {
     Driver(String),
+    InitializationFailed(String),
     NotEnabled,
     NotFound,
     PermissionDenied,
+}
+
+impl Display for ErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> { 
+        match self {
+            ErrorKind::Driver(str) => write!(f, "driver implementation error : {}", str),
+            ErrorKind::InitializationFailed(str) => write!(f, "error occured when initializing repository : {}", str),
+            ErrorKind::NotEnabled => write!(f, "repository is not enabled"),
+            ErrorKind::NotFound => write!(f, "related data is not found"),
+            ErrorKind::PermissionDenied => write!(f, "permission denied to access this resource"),
+        }
+    }
 }
 
 pub struct FindParams {

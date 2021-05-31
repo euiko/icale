@@ -6,9 +6,9 @@ pub enum Gender {
 
 #[derive(Debug)]
 pub struct Profile {
-    id: String,
-    gender: Gender, 
-    name: String,
+    pub id: String,
+    pub gender: Gender, 
+    pub name: String,
 }
 
 #[derive(Debug,PartialEq)]
@@ -20,7 +20,7 @@ pub enum Skin {
 
 #[derive(Debug)]
 pub struct Appearance {
-    skin: Skin,
+    pub skin: Skin,
 }
 
 #[derive(Debug)]
