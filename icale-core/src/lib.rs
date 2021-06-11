@@ -6,6 +6,7 @@ mod tests {
     }
 }
 
+pub mod core;
 pub mod service;
 
 extern crate chrono;

@@ -8,6 +8,7 @@ use config::*;
 
 pub mod glue;
 
+#[derive(Debug)]
 pub enum ErrorKind {
     Driver(String),
     InitializationFailed(String),
@@ -44,16 +45,16 @@ pub struct FindResult {
 }
 
 
-#[async_trait]
+#[async_trait(?Send)]
 pub trait Repository {
     fn init(&mut self, config: &Config) -> Option<ErrorKind>;
     fn close(&mut self) -> Option<ErrorKind>;
 
     async fn create(&mut self, character: Character) -> Result<Character, ErrorKind>;
-    async fn get_by_profile_id(&mut self, profile_id: String) -> Result<Character, ErrorKind>;
+    async fn get_by_profile_id(&mut self, profile_id: &str) -> Result<Character, ErrorKind>;
     async fn find(&mut self, params: FindParams) -> Result<FindResult, ErrorKind>;
     async fn update(&mut self, character: Character) -> Result<Character, ErrorKind>;
     async fn patch(&mut self, character: Character) -> Result<Character, ErrorKind>;
     async fn remove(&mut self, character: Character) -> Result<Character, ErrorKind>;
-    async fn remove_by_profile_id(&mut self, character: Character) -> Result<Character, ErrorKind>;
+    async fn remove_by_profile_id(&mut self, profile_id: &str) -> Result<Character, ErrorKind>;
 }

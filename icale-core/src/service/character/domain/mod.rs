@@ -1,42 +1,51 @@
-#[derive(Debug,PartialEq)]
+use uuid::Uuid;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Gender {
     Male,
     Female,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Profile {
     pub id: String,
     pub gender: Gender, 
     pub name: String,
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Skin {
     White,
     Black,
     Yellow,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Appearance {
     pub skin: Skin,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Character {
-    profile: Profile,
-    appearance: Appearance,
+    id: String,
+    pub profile: Profile,
+    pub appearance: Appearance,
 }
 
 
 impl Character {
     pub fn new(profile: Profile, appearance: Appearance) -> Self {
         Self{
+            id: Uuid::new_v4().to_hyphenated().to_string(),
             appearance: appearance,
             profile: profile,
         }
-    }    
+    }
+    pub fn get_id<'a>(&'a self) -> &'a String {
+        &self.id
+    }
+
     pub fn get_profile<'a>(&'a self) -> &'a Profile {
         &self.profile
     }
