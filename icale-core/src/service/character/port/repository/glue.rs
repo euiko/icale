@@ -4,13 +4,13 @@ use std::ops::Deref;
 use std::option::Option;
 use std::sync::Arc;
 
+use crate::core::glue;
 use async_trait::async_trait;
 use futures::executor::block_on;
 use gluesql::{execute, parse, SledStorage};
 use serde::{Deserialize, Serialize};
 use sql_builder::prelude::*;
 use sql_builder::SqlBuilder;
-use crate::core::glue;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
@@ -70,13 +70,35 @@ struct Model {
 
 impl Model {
     fn from_domain(character: Character) -> Model {
-        Model{
+        Model {
             id: character.get_id().clone(), // for id will be cloned instead
             profile_id: character.profile.id,
             profile_name: character.profile.name,
             profile_gender: character.profile.gender as i64,
             appearance_skin: character.appearance.skin as i64,
         }
+    }
+    fn into_domain(self) -> Character {
+        Character::new_with_id(
+            Profile {
+                id: self.profile_id,
+                name: self.profile_name,
+                gender: match self.profile_gender {
+                    i if i == Gender::Female as i64 => Gender::Female,
+                    i if i == Gender::Male as i64 => Gender::Male,
+                    _ => Gender::Unknown,
+                },
+            },
+            Appearance {
+                skin: match self.appearance_skin {
+                    i if i == Skin::Black as i64 => Skin::Black,
+                    i if i == Skin::White as i64 => Skin::White,
+                    i if i == Skin::Yellow as i64 => Skin::Yellow,
+                    _ => Skin::Unknown,
+                },
+            },
+            self.id,
+        )
     }
 }
 
@@ -179,9 +201,7 @@ impl Repository for GlueRepository {
         )?;
         let storage = self.get_storage()?;
         match execute(storage, &query).await {
-            Ok((_storage, _)) => {
-                Ok(character)
-            }
+            Ok((_storage, _)) => Ok(character),
             Err((_storage, err)) => {
                 Err(ErrorKind::Driver(format!("execute query failed: {}", err)))
             }
@@ -195,10 +215,13 @@ impl Repository for GlueRepository {
         )?;
         let storage = self.get_storage()?;
         match execute(storage, &query).await {
-            Ok((_storage, payload)) => glue::deserialize_one::<Character>(payload).or_else(|_| Err(ErrorKind::Driver("".to_string()))),
-            Err((_storage, err)) => Err(ErrorKind::Driver(format!("execute query failed: {}", err)))
+            Ok((_storage, payload)) => Ok(glue::deserialize_one::<Model>(payload)
+                .or_else(|err| Err(ErrorKind::Driver(format!("{}", err))))?
+                .into_domain()),
+            Err((_storage, err)) => {
+                Err(ErrorKind::Driver(format!("execute query failed: {}", err)))
+            }
         }
-
     }
     async fn find(&mut self, params: FindParams) -> Result<FindResult, ErrorKind> {
         todo!()
@@ -245,15 +268,17 @@ mod test {
     fn crud() {
         let mut glueRepo = new_repository();
 
-        let mut char1 = Character::new(Profile{
-            id: "euiko".to_string(),
-            name: "Candra Kharista".to_string(),
-            gender: Gender::Male,
-        }, Appearance{
-            skin: Skin::Yellow,
-        });
+        let mut char1 = Character::new(
+            Profile {
+                id: "euiko".to_string(),
+                name: "Candra Kharista".to_string(),
+                gender: Gender::Male,
+            },
+            Appearance { skin: Skin::Yellow },
+        );
 
         char1 = block_on(glueRepo.create(char1)).unwrap();
-        block_on(glueRepo.get_by_profile_id(&char1.profile.id)).unwrap();
+        let get_char1 = block_on(glueRepo.get_by_profile_id(&char1.profile.id)).unwrap();
+        assert_eq!(char1, get_char1);
     }
 }
