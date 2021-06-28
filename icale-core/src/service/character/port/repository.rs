@@ -1,12 +1,12 @@
-
-use async_trait::async_trait;
 use crate::service::character::domain::*;
+
 use std::fmt::Display;
 use std::result::Result;
 use std::option::Option;
-use config::*;
 
-pub mod glue;
+use async_trait::async_trait;
+use config::*;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub enum ErrorKind {
@@ -29,19 +29,21 @@ impl Display for ErrorKind {
     }
 }
 
+#[derive(Debug, Deserialize)]
 pub struct FindParams {
-    profile_id: String,
-    profile_name: String,
-    keyword: String,
+    pub profile_id: Option<String>,
+    pub profile_name: Option<String>,
+    pub keyword: Option<String>,
 
-    skip: i64,
-    limit: Option<i64>,
+    pub skip: i64,
+    pub limit: Option<i64>,
 }
 
+#[derive(Debug, Serialize)]
 pub struct FindResult {
-    records: Vec<Character>,
-    total_records: i64,
-    total_pages: Option<i64>,
+    pub records: Vec<Character>,
+    pub total_records: i64,
+    pub total_pages: Option<i64>,
 }
 
 

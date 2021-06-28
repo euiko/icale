@@ -1,5 +1,7 @@
-use super::*;
+use crate::service::character::domain::*;
+use crate::service::character::port::repository::*;
 
+use std::fmt::Write;
 use std::ops::Deref;
 use std::option::Option;
 use std::sync::Arc;
@@ -7,10 +9,12 @@ use std::sync::Arc;
 use crate::core::glue;
 use async_trait::async_trait;
 use futures::executor::block_on;
-use gluesql::{execute, parse, SledStorage};
+use gluesql::{execute, parse, Payload, SledStorage, Query};
 use serde::{Deserialize, Serialize};
 use sql_builder::prelude::*;
 use sql_builder::SqlBuilder;
+
+const TableName: &str = "character";
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
@@ -36,15 +40,25 @@ impl Default for Config {
     }
 }
 
-fn build_queries(sql_builder: &mut SqlBuilder) -> Result<Vec<gluesql::Query>, ErrorKind> {
-    let sql_string = sql_builder
-        .sql()
-        .map_err(|_| ErrorKind::Driver("failed to build sql script".to_string()))?;
+fn build_queries(sql_builders : Vec<&mut SqlBuilder>) -> Result<Vec<gluesql::Query>, ErrorKind> {
+    let queries: Result<Vec<String>, ErrorKind> = sql_builders
+        .iter()
+        .map(|builder: &&mut SqlBuilder| {
+            builder
+                .sql()
+                .map_err(|_| ErrorKind::Driver("failed to build query".to_string()))
+        })
+        .collect();
+    let sql_string = queries?.iter().fold(String::new(), |mut str, query| {
+        writeln!(&mut str, "{};", query);
+        str
+    });
+    println!("sql string {}", sql_string);
     Ok(parse(&sql_string).map_err(|e| ErrorKind::Driver(format!("parse query failed: {}", e)))?)
 }
 
 fn build_query(sql_builder: &mut SqlBuilder) -> Result<gluesql::Query, ErrorKind> {
-    let mut queries = build_queries(sql_builder)?;
+    let mut queries = build_queries(vec![sql_builder])?;
     if queries.len() != 1 {
         return Err(ErrorKind::Driver(format!(
             "query must have only one statement, got {} statements",
@@ -57,8 +71,21 @@ fn build_query(sql_builder: &mut SqlBuilder) -> Result<gluesql::Query, ErrorKind
     ))
 }
 
-// Model represent underlying actual data structure in the glue's store implementation
+// TotalRecords are only meant to be used internally for this store implementation
+// to help deserialize total_records data
+#[derive(Debug, Serialize, Deserialize)]
+struct TotalRecords {
+    total_records: i64,
+}
 
+// TotalPages are only meant to be used internally for this store implementation
+// to help deserialize total_pages data
+#[derive(Debug, Serialize, Deserialize)]
+struct TotalPages {
+    total_pages: Option<i64>,
+}
+
+// Model represent underlying actual data structure in the glue's store implementation
 #[derive(Debug, Serialize, Deserialize)]
 struct Model {
     pub id: String,
@@ -183,7 +210,7 @@ impl Repository for GlueRepository {
 
     async fn create(&mut self, character: Character) -> Result<Character, ErrorKind> {
         let query = build_query(
-            SqlBuilder::insert_into("character")
+            SqlBuilder::insert_into(TableName)
                 .fields(&[
                     "id",
                     "profile_id",
@@ -209,22 +236,123 @@ impl Repository for GlueRepository {
     }
     async fn get_by_profile_id(&mut self, profile_id: &str) -> Result<Character, ErrorKind> {
         let query = build_query(
-            SqlBuilder::select_from("character")
+            SqlBuilder::select_from(TableName)
                 .field("*")
                 .and_where_eq("profile_id", &quote(profile_id)),
         )?;
         let storage = self.get_storage()?;
         match execute(storage, &query).await {
-            Ok((_storage, payload)) => Ok(glue::deserialize_one::<Model>(payload)
+            Ok((_storage, payload)) => {
+                Ok(glue::deserialize_one::<Model>(payload)
                 .or_else(|err| Err(ErrorKind::Driver(format!("{}", err))))?
-                .into_domain()),
+                .into_domain())
+            },
             Err((_storage, err)) => {
                 Err(ErrorKind::Driver(format!("execute query failed: {}", err)))
             }
         }
     }
     async fn find(&mut self, params: FindParams) -> Result<FindResult, ErrorKind> {
-        todo!()
+        // filter_builder help to build filter query
+        let filter_builder = |sql: &mut SqlBuilder| {
+            let keyword = params.keyword.clone().unwrap_or_default();
+            if keyword != "" {
+                sql.and_where_like_any(
+                    "LOWER(profile_name) || ' ' || LOWER(profile_id)",
+                    keyword.to_lowercase(),
+                );
+            }
+            if let Some(profile_id) = params.profile_id.clone() {
+                sql.and_where_eq("profile_id", &quote(profile_id));
+            }
+
+            if let Some(profile_name) = params.profile_name.clone() {
+                sql.and_where_eq("profile_name", &quote(profile_name));
+            }
+        };
+
+        //  data sql builder
+        let mut select_sql = SqlBuilder::select_from(TableName);
+        select_sql.field("*").offset(params.skip);
+        {
+            if let Some(limit) = params.limit {
+                select_sql.limit(limit);
+            }
+        }
+        filter_builder(&mut select_sql);
+
+        // total_records sql builder
+        let mut total_records_sql = SqlBuilder::select_from(TableName);
+        total_records_sql
+            .count_as("id", "total_records");
+        filter_builder(&mut total_records_sql);
+
+        let queries = build_queries(vec![
+            &mut select_sql,
+            &mut total_records_sql,
+        ])?;
+
+        let mut result = FindResult {
+            records: Vec::new(),
+            total_pages: Some(0),
+            total_records: 0,
+        };
+
+        type CollectorFn = fn(&FindParams, FindResult, Payload) -> Result<FindResult, ErrorKind>;
+        const collectors: [CollectorFn; 3] = [
+            |_params, mut result, payload| -> Result<FindResult, ErrorKind> {
+                let data = glue::deserialize::<Model>(payload)
+                    .or_else(|err| {
+                        Err(ErrorKind::Driver(format!("failed to get total_pages data")))
+                    })?
+                    .into_iter()
+                    .map(|d| d.into_domain())
+                    .collect();
+                result.records = data;
+                Ok(result)
+            },
+            |_params, mut result, payload| -> Result<FindResult, ErrorKind> {
+                let data = glue::deserialize_one::<TotalRecords>(payload).or_else(|_err| {
+                    Err(ErrorKind::Driver(format!(
+                        "failed to get total_records data"
+                    )))
+                })?;
+                result.total_records = data.total_records;
+                Ok(result)
+            },
+            |params, mut result, _payload| -> Result<FindResult, ErrorKind> {
+                if let Some(limit) = params.limit {
+                    result.total_pages =
+                        Some((result.total_records as f64 / limit as f64).ceil() as i64)
+                }
+                Ok(result)
+            },
+        ];
+        let mut storage = self.get_storage()?;
+
+        let mut queries: Vec<Option<Query>> = queries.into_iter().map(|q| Some(q)).collect();
+        queries.push(None);
+
+        for (f, query) in collectors.iter().zip(queries.iter()).into_iter() {
+            if let Some(query) = query {
+                match execute(storage, &query).await {
+                    Ok((_storage, payload)) => {
+                        storage = _storage;
+                        result = f(&params, result, payload)?;
+                    }
+                    Err((_storage, err)) => {
+                        return Err(ErrorKind::Driver(format!("execute query failed: {}", err)));
+                    }
+                }
+            } else {
+                result = f(&params, result, Payload::Select{
+                    labels: vec![],
+                    rows: vec![],
+                })?;
+            }
+        }
+
+        Ok(result)
     }
     async fn update(&mut self, character: Character) -> Result<Character, ErrorKind> {
         todo!()
@@ -280,5 +408,14 @@ mod test {
         char1 = block_on(glueRepo.create(char1)).unwrap();
         let get_char1 = block_on(glueRepo.get_by_profile_id(&char1.profile.id)).unwrap();
         assert_eq!(char1, get_char1);
+
+        let find_chars = block_on(glueRepo.find(FindParams{
+            keyword: None,
+            profile_name: Some(char1.profile.name.to_string()),
+            profile_id: None,
+            skip: 0,
+            limit: None,
+        })).unwrap();
+        println!("find result is: {:?}", find_chars);
     }
 }

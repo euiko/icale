@@ -28,13 +28,15 @@ fn convert_row_with_labels(labels: Vec<String>) -> Box<dyn Fn(Row) -> Json> {
     Box::new(move |row: Row| -> Json {
         let Row(values) = row;
 
-        values.into_iter().zip(labels.iter()).fold(
-            Json::default(),
-            |mut json, (val, key)| {
-                json[key.to_string()] = convert_value(val);
-                json
+        Json::Object(values.into_iter().zip(labels.iter()).fold(
+            Map::new(),
+            |mut m, (val, key)| {
+                // explicit copy here, to be able to reuse the same labels 
+                // in multiple result
+                m.insert(key.to_string(), convert_value(val));
+                m
             },
-        )
+        ))
     })
 }
 
